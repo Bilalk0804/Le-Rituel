@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
 import { useAuth } from "@/context/AuthContext";
@@ -7,8 +7,7 @@ import { toast } from "sonner";
 import { Download, Trash2, ArrowLeft } from "lucide-react";
 
 export default function Settings() {
-  const { user, setUser } = useAuth();
-  const nav = useNavigate();
+  const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -44,12 +43,12 @@ export default function Settings() {
     setDeleting(true);
     try {
       await api.delete("/account");
-      setUser(false);
       toast.success("Account deleted");
-      nav("/");
+      // Force full navigation to landing BEFORE clearing auth state so
+      // ProtectedRoute doesn't race us to /login.
+      window.location.replace("/");
     } catch (e) {
       toast.error("Delete failed");
-    } finally {
       setDeleting(false);
     }
   };
