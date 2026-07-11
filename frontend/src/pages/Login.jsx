@@ -79,6 +79,16 @@ export default function Login() {
           </button>
         </form>
 
+        <div className="mt-5 text-center">
+          <Link
+            to="/forgot-password"
+            className="text-sm text-[#2B3024]/60 hover:text-[#2B3024] underline underline-offset-4"
+            data-testid="login-forgot-link"
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
         <p className="mt-8 text-sm text-[#2B3024]/60 text-center">
           New here?{" "}
           <Link to="/register" className="text-[#2B3024] underline underline-offset-4" data-testid="login-to-register-link">

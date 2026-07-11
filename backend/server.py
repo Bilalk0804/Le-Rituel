@@ -6,8 +6,9 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 import os
+import secrets
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
 from bson import ObjectId
@@ -75,6 +76,15 @@ class RegisterInput(BaseModel):
 class LoginInput(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+
+
+class ForgotPasswordInput(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordInput(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class SkinProfileInput(BaseModel):
@@ -271,6 +281,56 @@ async def refresh(request: Request, response: Response):
     at = create_access_token(uid, user["email"])
     new_rt = create_refresh_token(uid)
     set_auth_cookies(response, at, new_rt)
+    return {"ok": True}
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordInput):
+    """Issue a password reset token. Always returns success to avoid email enumeration."""
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.password_reset_tokens.insert_one({
+            "token": token,
+            "user_id": str(user["_id"]),
+            "email": email,
+            "expires_at": expires_at,
+            "used": False,
+            "created_at": datetime.now(timezone.utc),
+        })
+        reset_link = f"{frontend_url}/reset-password?token={token}"
+        logger.info("Password reset requested for %s — link: %s", email, reset_link)
+        # In production, dispatch this via email service.
+    return {"ok": True, "message": "If that email exists, we've sent a reset link."}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordInput):
+    doc = await db.password_reset_tokens.find_one({"token": body.token})
+    if not doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+    if doc.get("used"):
+        raise HTTPException(status_code=400, detail="This reset link has already been used")
+    exp = doc.get("expires_at")
+    if exp:
+        exp_utc = exp if exp.tzinfo else exp.replace(tzinfo=timezone.utc)
+        if exp_utc < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="This reset link has expired")
+    user = await db.users.find_one({"_id": ObjectId(doc["user_id"])})
+    if not user:
+        raise HTTPException(status_code=400, detail="Account no longer exists")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(body.password)}},
+    )
+    await db.password_reset_tokens.update_one(
+        {"token": body.token},
+        {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}},
+    )
+    # Clear any brute-force lockout for this account.
+    await clear_failures(db, user["email"])
     return {"ok": True}
 
 
