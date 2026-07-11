@@ -19,11 +19,18 @@ export default function Dashboard() {
         const [r, p] = await Promise.all([api.get("/routine"), api.get("/profile")]);
         setRoutine(r.data.routine);
         setProfile(p.data.profile);
+      } catch (e) {
+        if (e.response?.status === 401) {
+          // Session expired — bounce to login.
+          nav("/login", { replace: true });
+          return;
+        }
+        // Other errors: leave routine/profile as null so the empty state renders.
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [nav]);
 
   if (loading) {
     return (
