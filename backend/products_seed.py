@@ -1,5 +1,13 @@
-"""Seed skincare products into MongoDB. Idempotent."""
+"""Seed skincare products into MongoDB. Idempotent by (name, brand)."""
 from datetime import datetime, timezone
+
+
+CATEGORY_IMAGES = {
+    "cleanser": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80",
+    "treatment": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80",
+    "moisturizer": "https://images.unsplash.com/photo-1570194065650-d99fb4bedf0a?auto=format&fit=crop&w=600&q=80",
+    "spf": "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=600&q=80",
+}
 
 
 PRODUCTS = [
@@ -313,14 +321,22 @@ PRODUCTS = [
 
 
 async def seed_products(db):
-    """Insert products that are not yet in the collection. Idempotent by (name, brand)."""
+    """Insert products that are not yet in the collection. Idempotent by (name, brand).
+    Also backfills image_url on any existing doc that is missing it."""
     inserted = 0
     for p in PRODUCTS:
+        image_url = p.get("image_url") or CATEGORY_IMAGES.get(p["category"])
         existing = await db.products.find_one({"name": p["name"], "brand": p["brand"]})
         if existing:
+            if not existing.get("image_url") and image_url:
+                await db.products.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {"image_url": image_url}},
+                )
             continue
         await db.products.insert_one({
             **p,
+            "image_url": image_url,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         inserted += 1

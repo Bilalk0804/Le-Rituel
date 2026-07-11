@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { api, formatApiErrorDetail } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
+import { SkinPhotoStep } from "@/components/SkinPhotoStep";
 import { toast } from "sonner";
 
 const STEPS = [
@@ -86,6 +87,7 @@ const INITIAL = {
 
 export default function Quiz() {
   const nav = useNavigate();
+  const [phase, setPhase] = useState("intro"); // intro | quiz
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState(INITIAL);
   const [submitting, setSubmitting] = useState(false);
@@ -106,12 +108,26 @@ export default function Quiz() {
             age_range: data.profile.age_range || "",
             budget: data.profile.budget || "",
           });
+          // Existing profile → skip AI intro and go straight to quiz for edits
+          setPhase("quiz");
         }
       } catch {
         /* no existing profile */
       }
     })();
   }, []);
+
+  const applyAiAnalysis = (result) => {
+    setAnswers((prev) => ({
+      ...prev,
+      skin_type: result.skin_type || prev.skin_type,
+      concerns: (result.concerns || []).slice(0, 3),
+    }));
+    setPhase("quiz");
+    toast.success("Photo read — verify the rest of your answers");
+  };
+
+  const skipPhoto = () => setPhase("quiz");
 
   const canProceed = () => {
     const val = answers[step.key];
@@ -157,6 +173,17 @@ export default function Quiz() {
   };
 
   const progress = ((idx + 1) / total) * 100;
+
+  if (phase === "intro") {
+    return (
+      <div className="min-h-[100dvh] bg-[#F9F8F5]" data-testid="quiz-page">
+        <TopBar showLogout={false} />
+        <div className="px-6 pt-4 pb-24 max-w-md mx-auto">
+          <SkinPhotoStep onDone={applyAiAnalysis} onSkip={skipPhoto} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-[#F9F8F5]" data-testid="quiz-page">

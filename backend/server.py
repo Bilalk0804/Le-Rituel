@@ -27,6 +27,7 @@ from auth import (
 from crypto_utils import encrypt_str, decrypt_str
 from products_seed import seed_products
 from recommender import build_routine
+from skin_analysis import analyze_skin_photo
 
 import jwt as _jwt
 
@@ -85,6 +86,21 @@ class ForgotPasswordInput(BaseModel):
 class ResetPasswordInput(BaseModel):
     token: str = Field(min_length=10, max_length=128)
     password: str = Field(min_length=8, max_length=128)
+
+
+class SkinAnalyzeInput(BaseModel):
+    image_base64: str = Field(min_length=32, max_length=8_000_000)
+    mime_type: Optional[str] = Field(default="image/jpeg", max_length=32)
+
+    @field_validator("mime_type")
+    @classmethod
+    def check_mime(cls, v):
+        if v is None:
+            return "image/jpeg"
+        v = v.lower().strip()
+        if v not in {"image/jpeg", "image/jpg", "image/png", "image/webp"}:
+            raise ValueError("Only JPEG, PNG or WEBP images are supported")
+        return v
 
 
 class SkinProfileInput(BaseModel):
@@ -415,6 +431,20 @@ def _routine_public(doc: dict) -> dict:
 async def list_products():
     docs = await db.products.find({}, {"_id": 0}).to_list(500)
     return {"products": docs}
+
+
+# ---------- Skin Photo Analysis (Claude Sonnet 4.5 vision) ----------
+@api.post("/skin/analyze")
+async def skin_analyze(body: SkinAnalyzeInput, user=Depends(_current)):
+    """Analyze an uploaded face photo. The photo is discarded after analysis."""
+    try:
+        result = await analyze_skin_photo(body.image_base64, session_id=f"skin-{user['id']}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Skin analysis failed: %s", e)
+        raise HTTPException(status_code=502, detail="Skin analysis is temporarily unavailable")
+    return {"analysis": result}
 
 
 # ---------- Account: export & delete ----------

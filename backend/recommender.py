@@ -80,6 +80,7 @@ def build_routine(products: List[dict], profile: Dict) -> Dict:
                 "brand": p.get("brand"),
                 "budget_tier": p.get("budget_tier"),
                 "description": p.get("description"),
+                "image_url": p.get("image_url"),
             }
             for p in top
         ]

@@ -7,6 +7,7 @@ import { TopBar } from "@/components/TopBar";
 import { toast } from "sonner";
 
 function StepCard({ step, index }) {
+  const hero = step.examples?.[0]?.image_url;
   return (
     <motion.li
       variants={{
@@ -14,34 +15,52 @@ function StepCard({ step, index }) {
         show: { opacity: 1, scale: 1, y: 0 },
       }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className="bg-white rounded-3xl p-6 shadow-[0_8px_32px_rgba(43,48,36,0.06)]"
+      className="bg-white rounded-3xl overflow-hidden shadow-[0_8px_32px_rgba(43,48,36,0.06)]"
       data-testid={`routine-step-${step.step}`}
     >
-      <div className="flex items-center gap-4">
-        <span className="w-10 h-10 rounded-full bg-[#F3E8E0] text-[#2B3024] font-serif italic text-lg grid place-items-center">
-          {index + 1}
-        </span>
-        <div>
-          <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#7A8271]">Step {index + 1}</p>
-          <p className="font-serif italic text-2xl text-[#2B3024] leading-tight">{step.label}</p>
-        </div>
-      </div>
-      <p className="mt-4 text-[#2B3024]/75 leading-relaxed">{step.why}</p>
-
-      {step.examples?.length > 0 && (
-        <div className="mt-5 pt-5 border-t border-[#2B3024]/8 space-y-3">
-          {step.examples.map((p, i) => (
-            <div key={i} className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-medium text-[#2B3024]">{p.name}</p>
-                <p className="text-xs tracking-[0.14em] uppercase text-[#2B3024]/50 mt-1">
-                  {p.brand} · {p.budget_tier}
-                </p>
-              </div>
-            </div>
-          ))}
+      {hero && (
+        <div className="w-full h-40 bg-[#F3E8E0] overflow-hidden">
+          <img
+            src={hero}
+            alt={step.examples[0].name}
+            loading="lazy"
+            className="w-full h-full object-cover"
+            data-testid={`routine-step-${step.step}-image`}
+          />
         </div>
       )}
+      <div className="p-6">
+        <div className="flex items-center gap-4">
+          <span className="w-10 h-10 rounded-full bg-[#F3E8E0] text-[#2B3024] font-serif italic text-lg grid place-items-center">
+            {index + 1}
+          </span>
+          <div>
+            <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#7A8271]">Step {index + 1}</p>
+            <p className="font-serif italic text-2xl text-[#2B3024] leading-tight">{step.label}</p>
+          </div>
+        </div>
+        <p className="mt-4 text-[#2B3024]/75 leading-relaxed">{step.why}</p>
+
+        {step.examples?.length > 0 && (
+          <div className="mt-5 pt-5 border-t border-[#2B3024]/8 space-y-4">
+            {step.examples.map((p, i) => (
+              <div key={i} className="flex items-start gap-4">
+                {p.image_url && (
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#F3E8E0] flex-shrink-0">
+                    <img src={p.image_url} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium text-[#2B3024] leading-snug">{p.name}</p>
+                  <p className="text-xs tracking-[0.14em] uppercase text-[#2B3024]/50 mt-1">
+                    {p.brand} · {p.budget_tier}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </motion.li>
   );
 }
