@@ -1,13 +1,50 @@
 """Seed skincare products into MongoDB. Idempotent by (name, brand)."""
+import hashlib
 from datetime import datetime, timezone
 
 
-CATEGORY_IMAGES = {
-    "cleanser": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80",
-    "treatment": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80",
-    "moisturizer": "https://images.unsplash.com/photo-1570194065650-d99fb4bedf0a?auto=format&fit=crop&w=600&q=80",
-    "spf": "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=600&q=80",
+# Curated pool of minimalist Unsplash skincare photos. Each product gets one
+# deterministically via hash(name) so images vary but stay stable across restarts.
+CATEGORY_IMAGE_POOL = {
+    "cleanser": [
+        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1631730359585-38a4935cbec4?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=600&q=80",
+    ],
+    "treatment": [
+        "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1585652757141-8837d676fac8?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1608248511180-b8ffee6f96b3?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1631730486572-226d1f595b68?auto=format&fit=crop&w=600&q=80",
+    ],
+    "moisturizer": [
+        "https://images.unsplash.com/photo-1570194065650-d99fb4bedf0a?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1608248511180-b8ffee6f96b3?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1631730359585-38a4935cbec4?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1608248543960-fbb9dc9d4c17?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1620916297893-3d5b62d3d47a?auto=format&fit=crop&w=600&q=80",
+    ],
+    "spf": [
+        "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1526045478516-99145907023c?auto=format&fit=crop&w=600&q=80",
+        "https://images.unsplash.com/photo-1616690710400-a16d146927c5?auto=format&fit=crop&w=600&q=80",
+    ],
 }
+
+
+def _pick_image(name: str, category: str) -> str:
+    pool = CATEGORY_IMAGE_POOL.get(category) or []
+    if not pool:
+        return ""
+    digest = hashlib.sha1(name.encode("utf-8")).hexdigest()
+    idx = int(digest, 16) % len(pool)
+    return pool[idx]
 
 
 PRODUCTS = [
@@ -322,13 +359,14 @@ PRODUCTS = [
 
 async def seed_products(db):
     """Insert products that are not yet in the collection. Idempotent by (name, brand).
-    Also backfills image_url on any existing doc that is missing it."""
+    Also refreshes image_url on every startup so per-product images stay in sync
+    with the current pool assignment (deterministic by name)."""
     inserted = 0
     for p in PRODUCTS:
-        image_url = p.get("image_url") or CATEGORY_IMAGES.get(p["category"])
+        image_url = p.get("image_url") or _pick_image(p["name"], p["category"])
         existing = await db.products.find_one({"name": p["name"], "brand": p["brand"]})
         if existing:
-            if not existing.get("image_url") and image_url:
+            if existing.get("image_url") != image_url and image_url:
                 await db.products.update_one(
                     {"_id": existing["_id"]},
                     {"$set": {"image_url": image_url}},

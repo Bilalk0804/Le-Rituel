@@ -83,6 +83,7 @@ const INITIAL = {
   current_routine_level: "",
   age_range: "",
   budget: "",
+  ai_notes: "",
 };
 
 export default function Quiz() {
@@ -107,6 +108,7 @@ export default function Quiz() {
             current_routine_level: data.profile.current_routine_level || "",
             age_range: data.profile.age_range || "",
             budget: data.profile.budget || "",
+            ai_notes: data.profile.ai_notes || "",
           });
           // Existing profile → skip AI intro and go straight to quiz for edits
           setPhase("quiz");
@@ -122,6 +124,7 @@ export default function Quiz() {
       ...prev,
       skin_type: result.skin_type || prev.skin_type,
       concerns: (result.concerns || []).slice(0, 3),
+      ai_notes: result.notes || "",
     }));
     setPhase("quiz");
     toast.success("Photo read — verify the rest of your answers");
@@ -146,6 +149,8 @@ export default function Quiz() {
     setSubmitting(true);
     try {
       const payload = { ...answers };
+      // Drop empty ai_notes so backend doesn't store an empty string
+      if (!payload.ai_notes) delete payload.ai_notes;
       const { data } = await api.post("/routine/generate", payload);
       // stash last routine in sessionStorage for instant paint
       sessionStorage.setItem("le_rituel_last_routine", JSON.stringify(data.routine));

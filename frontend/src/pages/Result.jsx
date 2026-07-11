@@ -123,6 +123,23 @@ export default function Result() {
           </p>
         </motion.div>
 
+        {routine.ai_notes && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="mt-8 rounded-3xl bg-white/70 backdrop-blur px-6 py-5 border border-[#2B3024]/10 max-w-xl"
+            data-testid="result-ai-notes"
+          >
+            <p className="text-[10px] tracking-[0.28em] uppercase font-bold text-[#2B3024]/60">
+              What we noticed
+            </p>
+            <p className="mt-2 font-serif italic text-lg text-[#2B3024] leading-snug">
+              {routine.ai_notes}
+            </p>
+          </motion.div>
+        )}
+
         <div className="mt-10 grid md:grid-cols-2 gap-8">
           <section>
             <div className="flex items-center gap-3">

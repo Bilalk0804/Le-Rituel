@@ -111,6 +111,7 @@ class SkinProfileInput(BaseModel):
     age_range: AgeRange
     budget: Budget
     current_routine_level: RoutineLevel
+    ai_notes: Optional[str] = Field(default=None, max_length=400)
 
     @field_validator("concerns")
     @classmethod
@@ -128,6 +129,14 @@ class SkinProfileInput(BaseModel):
     def clean_allergies(cls, v):
         # Strip control characters / HTML
         return "".join(ch for ch in (v or "") if ch.isprintable()).strip()
+
+    @field_validator("ai_notes")
+    @classmethod
+    def clean_ai_notes(cls, v):
+        if not v:
+            return None
+        cleaned = "".join(ch for ch in v if ch.isprintable()).strip()
+        return cleaned or None
 
 
 class PublicUser(BaseModel):
@@ -369,6 +378,7 @@ async def upsert_profile(body: SkinProfileInput, user=Depends(_current)):
         "age_range": body.age_range,
         "budget": body.budget,
         "current_routine_level": body.current_routine_level,
+        "ai_notes": body.ai_notes or "",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.skin_profiles.update_one(
@@ -385,6 +395,7 @@ def _profile_public(doc: dict) -> dict:
         "age_range": doc.get("age_range"),
         "budget": doc.get("budget"),
         "current_routine_level": doc.get("current_routine_level"),
+        "ai_notes": doc.get("ai_notes") or "",
         "updated_at": doc.get("updated_at"),
     }
 
@@ -402,6 +413,7 @@ async def generate_routine(body: SkinProfileInput, user=Depends(_current)):
         "user_id": user["id"],
         "am_steps": routine["am_steps"],
         "pm_steps": routine["pm_steps"],
+        "ai_notes": body.ai_notes or "",
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.routines.update_one(
@@ -422,6 +434,7 @@ def _routine_public(doc: dict) -> dict:
     return {
         "am_steps": doc.get("am_steps", []),
         "pm_steps": doc.get("pm_steps", []),
+        "ai_notes": doc.get("ai_notes") or "",
         "generated_at": doc.get("generated_at"),
     }
 
