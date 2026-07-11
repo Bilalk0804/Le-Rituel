@@ -199,14 +199,129 @@ PRODUCTS = [
         "budget_tier": "premium",
         "description": "Invisible, weightless gel sunscreen with a smoothing finish.",
     },
+
+    # ---------- SENSITIVE-SKIN ACTIVES ----------
+    {
+        "name": "The Ordinary Azelaic Acid Suspension 10%",
+        "brand": "The Ordinary",
+        "category": "treatment",
+        "skin_types": ["sensitive", "normal", "combination", "oily"],
+        "concerns": ["redness", "acne", "dark spots"],
+        "budget_tier": "drugstore",
+        "description": "Azelaic acid concentrate that calms redness, fades post-blemish marks and gently supports clearer skin. Suitable for reactive complexions.",
+    },
+    {
+        "name": "Paula's Choice 10% Azelaic Acid Booster",
+        "brand": "Paula's Choice",
+        "category": "treatment",
+        "skin_types": ["sensitive", "normal", "combination"],
+        "concerns": ["redness", "dark spots", "acne"],
+        "budget_tier": "mid-range",
+        "description": "Lightweight azelaic acid + salicylic acid blend that evens tone and reduces visible redness without irritation.",
+    },
+    {
+        "name": "Naturium Azelaic Topical Acid 10%",
+        "brand": "Naturium",
+        "category": "treatment",
+        "skin_types": ["sensitive", "combination", "oily", "normal"],
+        "concerns": ["redness", "dark spots", "acne"],
+        "budget_tier": "drugstore",
+        "description": "Buffered azelaic acid formula with niacinamide to brighten and calm reactive skin.",
+    },
+    {
+        "name": "Purito Centella Green Level Buffet Serum",
+        "brand": "Purito",
+        "category": "treatment",
+        "skin_types": ["sensitive", "dry", "normal", "combination"],
+        "concerns": ["redness", "dullness"],
+        "budget_tier": "drugstore",
+        "description": "Centella asiatica and peptide serum that soothes reactive skin and reinforces the barrier.",
+    },
+    {
+        "name": "Dr. Jart+ Cicapair Tiger Grass Serum",
+        "brand": "Dr. Jart+",
+        "category": "treatment",
+        "skin_types": ["sensitive", "normal", "combination"],
+        "concerns": ["redness"],
+        "budget_tier": "mid-range",
+        "description": "Tiger grass and madecassoside serum that visibly reduces redness in reactive skin.",
+    },
+    {
+        "name": "Beauty of Joseon Glow Serum Propolis + Niacinamide",
+        "brand": "Beauty of Joseon",
+        "category": "treatment",
+        "skin_types": ["sensitive", "normal", "combination", "dry"],
+        "concerns": ["dullness", "redness", "large pores"],
+        "budget_tier": "drugstore",
+        "description": "Propolis and niacinamide serum that brightens dullness and calms reactive skin without stripping the barrier.",
+    },
+    {
+        "name": "The Inkey List PHA Toner",
+        "brand": "The Inkey List",
+        "category": "treatment",
+        "skin_types": ["sensitive", "dry", "normal"],
+        "concerns": ["dullness", "large pores"],
+        "budget_tier": "drugstore",
+        "description": "Polyhydroxy acid toner — a gentler alternative to AHAs — that smooths texture without triggering sensitivity.",
+    },
+    {
+        "name": "Krave Beauty Kale-lalu-yAHA",
+        "brand": "Krave Beauty",
+        "category": "treatment",
+        "skin_types": ["sensitive", "normal", "combination"],
+        "concerns": ["dullness", "dark spots"],
+        "budget_tier": "mid-range",
+        "description": "Buffered 5.25% AHA blend with kale and turmeric that resurfaces without over-exfoliating reactive skin.",
+    },
+    {
+        "name": "La Roche-Posay Cicaplast Baume B5+",
+        "brand": "La Roche-Posay",
+        "category": "treatment",
+        "skin_types": ["sensitive", "dry", "normal"],
+        "concerns": ["redness"],
+        "budget_tier": "mid-range",
+        "description": "Panthenol and madecassoside recovery balm that repairs and calms compromised, reactive skin.",
+    },
+    {
+        "name": "Skinfix Barrier+ Triple Lipid-Peptide Cream",
+        "brand": "Skinfix",
+        "category": "moisturizer",
+        "skin_types": ["sensitive", "dry", "normal"],
+        "concerns": ["redness", "fine lines"],
+        "budget_tier": "premium",
+        "description": "Ceramide, cholesterol and peptide cream engineered for barrier repair on reactive skin.",
+    },
+    {
+        "name": "Avene Tolerance Control Soothing Skin Recovery Cream",
+        "brand": "Avene",
+        "category": "moisturizer",
+        "skin_types": ["sensitive", "dry"],
+        "concerns": ["redness"],
+        "budget_tier": "mid-range",
+        "description": "Sterile, minimal-ingredient cream formulated for hyper-reactive skin.",
+    },
+    {
+        "name": "First Aid Beauty Ultra Repair Cream",
+        "brand": "First Aid Beauty",
+        "category": "moisturizer",
+        "skin_types": ["sensitive", "dry", "normal"],
+        "concerns": ["redness", "dullness"],
+        "budget_tier": "mid-range",
+        "description": "Colloidal oatmeal and shea butter cream that soothes flare-ups and rebuilds a compromised barrier.",
+    },
 ]
 
 
 async def seed_products(db):
-    """Insert products if collection is empty. Idempotent."""
-    count = await db.products.count_documents({})
-    if count == 0:
-        docs = []
-        for p in PRODUCTS:
-            docs.append({**p, "created_at": datetime.now(timezone.utc).isoformat()})
-        await db.products.insert_many(docs)
+    """Insert products that are not yet in the collection. Idempotent by (name, brand)."""
+    inserted = 0
+    for p in PRODUCTS:
+        existing = await db.products.find_one({"name": p["name"], "brand": p["brand"]})
+        if existing:
+            continue
+        await db.products.insert_one({
+            **p,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        inserted += 1
+    return inserted
