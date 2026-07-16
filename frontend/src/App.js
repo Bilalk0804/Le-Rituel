@@ -11,6 +11,7 @@ import Quiz from "@/pages/Quiz";
 import Result from "@/pages/Result";
 import Dashboard from "@/pages/Dashboard";
 import Settings from "@/pages/Settings";
+import CheckIngredients from "@/pages/CheckIngredients";
 
 function LandingOrDashboard() {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/result" element={<ProtectedRoute><Result /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/check" element={<ProtectedRoute><CheckIngredients /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -28,6 +28,7 @@ from crypto_utils import encrypt_str, decrypt_str
 from products_seed import seed_products
 from recommender import build_routine
 from skin_analysis import analyze_skin_photo
+from ingredient_checker import check_pair, known_ingredients
 
 import jwt as _jwt
 
@@ -113,6 +114,16 @@ class UpdateStepInput(BaseModel):
     def clean_name(cls, v):
         cleaned = "".join(ch for ch in (v or "") if ch.isprintable()).strip()
         return cleaned
+
+
+class IngredientCheckInput(BaseModel):
+    ingredient_a: str = Field(min_length=1, max_length=80)
+    ingredient_b: str = Field(min_length=1, max_length=80)
+
+    @field_validator("ingredient_a", "ingredient_b")
+    @classmethod
+    def clean_name(cls, v):
+        return "".join(ch for ch in (v or "") if ch.isprintable()).strip()
 
 
 class SkinProfileInput(BaseModel):
@@ -502,6 +513,20 @@ def _legacy_to_flat_steps(doc: dict) -> List[dict]:
 async def list_products():
     docs = await db.products.find({}, {"_id": 0}).to_list(500)
     return {"products": docs}
+
+
+# ---------- Ingredient Conflict Checker ----------
+@api.get("/ingredients")
+async def list_ingredients():
+    """Return the canonical list of known ingredients for the dropdown."""
+    return {"ingredients": known_ingredients()}
+
+
+@api.post("/ingredients/check")
+async def check_ingredients(body: IngredientCheckInput, user=Depends(_current)):
+    """Check whether two ingredients can be combined. Static rule-based lookup."""
+    result = check_pair(body.ingredient_a, body.ingredient_b)
+    return {"result": result}
 
 
 # ---------- Skin Photo Analysis (Claude Sonnet 4.5 vision) ----------
