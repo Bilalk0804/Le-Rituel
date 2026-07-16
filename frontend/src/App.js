@@ -12,6 +12,7 @@ import Result from "@/pages/Result";
 import Dashboard from "@/pages/Dashboard";
 import Settings from "@/pages/Settings";
 import CheckIngredients from "@/pages/CheckIngredients";
+import Progress from "@/pages/Progress";
 
 function LandingOrDashboard() {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/check" element={<ProtectedRoute><CheckIngredients /></ProtectedRoute>} />
+          <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

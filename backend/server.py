@@ -126,6 +126,36 @@ class IngredientCheckInput(BaseModel):
         return "".join(ch for ch in (v or "") if ch.isprintable()).strip()
 
 
+class ProgressRatings(BaseModel):
+    acne: int = Field(ge=1, le=5)
+    redness: int = Field(ge=1, le=5)
+    oiliness: int = Field(ge=1, le=5)
+    hydration: int = Field(ge=1, le=5)
+
+
+class ProgressEntryInput(BaseModel):
+    image_base64: str = Field(min_length=32, max_length=3_500_000)
+    mime_type: str = Field(default="image/jpeg", max_length=32)
+    ratings: ProgressRatings
+    notes: Optional[str] = Field(default=None, max_length=280)
+
+    @field_validator("mime_type")
+    @classmethod
+    def check_mime(cls, v):
+        v = (v or "image/jpeg").lower().strip()
+        if v not in {"image/jpeg", "image/jpg", "image/png", "image/webp"}:
+            raise ValueError("Only JPEG, PNG or WEBP images are supported")
+        return v
+
+    @field_validator("notes")
+    @classmethod
+    def clean_notes(cls, v):
+        if not v:
+            return None
+        cleaned = "".join(ch for ch in v if ch.isprintable()).strip()
+        return cleaned or None
+
+
 class SkinProfileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     skin_type: SkinType
@@ -180,6 +210,7 @@ async def _startup():
     await db.skin_profiles.create_index("user_id", unique=True)
     await db.routines.create_index("user_id")
     await db.token_blocklist.create_index("expires_at", expireAfterSeconds=0)
+    await db.progress_entries.create_index([("user_id", 1), ("created_at", -1)])
     # Seed
     await seed_products(db)
     await _seed_admin()
@@ -515,6 +546,56 @@ async def list_products():
     return {"products": docs}
 
 
+# ---------- Progress Tracking (manual self-rated) ----------
+@api.post("/progress/entries")
+async def create_progress_entry(body: ProgressEntryInput, user=Depends(_current)):
+    # Strip data-URL prefix if present so we store only the raw base64 payload.
+    payload = body.image_base64
+    if payload.startswith("data:"):
+        _, _, payload = payload.partition(",")
+    doc = {
+        "user_id": user["id"],
+        "image_base64": payload,
+        "mime_type": body.mime_type,
+        "ratings": body.ratings.model_dump(),
+        "notes": body.notes or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.progress_entries.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    return {"entry": _progress_public(doc)}
+
+
+@api.get("/progress/entries")
+async def list_progress_entries(user=Depends(_current)):
+    cursor = db.progress_entries.find({"user_id": user["id"]}).sort("created_at", -1).limit(60)
+    entries = [_progress_public(d) async for d in cursor]
+    return {"entries": entries}
+
+
+@api.delete("/progress/entries/{entry_id}")
+async def delete_progress_entry(entry_id: str, user=Depends(_current)):
+    try:
+        oid = ObjectId(entry_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    res = await db.progress_entries.delete_one({"_id": oid, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"ok": True}
+
+
+def _progress_public(doc: dict) -> dict:
+    return {
+        "id": str(doc.get("_id") or doc.get("id") or ""),
+        "image_base64": doc.get("image_base64", ""),
+        "mime_type": doc.get("mime_type", "image/jpeg"),
+        "ratings": doc.get("ratings") or {},
+        "notes": doc.get("notes") or "",
+        "created_at": doc.get("created_at"),
+    }
+
+
 # ---------- Ingredient Conflict Checker ----------
 @api.get("/ingredients")
 async def list_ingredients():
@@ -548,10 +629,21 @@ async def skin_analyze(body: SkinAnalyzeInput, user=Depends(_current)):
 async def export_account(user=Depends(_current)):
     profile = await db.skin_profiles.find_one({"user_id": user["id"]})
     routine = await db.routines.find_one({"user_id": user["id"]})
+    progress_docs = await db.progress_entries.find({"user_id": user["id"]}).sort("created_at", -1).to_list(200)
     return {
         "user": _user_public(user),
         "profile": _profile_public(profile) if profile else None,
         "routine": _routine_public(routine) if routine else None,
+        "progress": [
+            {
+                "created_at": d.get("created_at"),
+                "ratings": d.get("ratings"),
+                "notes": d.get("notes"),
+                # Image intentionally omitted to keep the export lightweight;
+                # users can re-download individual photos from the UI.
+            }
+            for d in progress_docs
+        ],
         "exported_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -561,6 +653,7 @@ async def delete_account(response: Response, user=Depends(_current)):
     uid = user["id"]
     await db.skin_profiles.delete_many({"user_id": uid})
     await db.routines.delete_many({"user_id": uid})
+    await db.progress_entries.delete_many({"user_id": uid})
     await db.users.delete_one({"_id": ObjectId(uid)})
     clear_auth_cookies(response)
     return {"ok": True}

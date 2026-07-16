@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Sun, Moon, RefreshCcw, Settings as SettingsIcon, Check, ArrowRight, FlaskConical } from "lucide-react";
+import { Sun, Moon, RefreshCcw, Settings as SettingsIcon, Check, ArrowRight, FlaskConical, TrendingUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
 import { useAuth } from "@/context/AuthContext";
@@ -171,6 +171,14 @@ export default function Dashboard() {
               >
                 <RefreshCcw className="w-3.5 h-3.5" strokeWidth={1.6} />
                 Retake quiz
+              </Link>
+              <Link
+                to="/progress"
+                data-testid="dashboard-progress-link"
+                className="rounded-full border border-[#2B3024]/20 text-[#2B3024] px-6 py-3 text-sm tracking-wide font-medium hover:border-[#2B3024]/60 inline-flex items-center gap-2"
+              >
+                <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.6} />
+                Progress
               </Link>
               <Link
                 to="/check"
