@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Sun, Moon, RefreshCcw, Settings as SettingsIcon, Check, ArrowRight, FlaskConical, TrendingUp, Flame, MessageCircle } from "lucide-react";
+import { Sun, Moon, RefreshCcw, Settings as SettingsIcon, Check, ArrowRight, FlaskConical, TrendingUp, Flame, MessageCircle, Trophy } from "lucide-react";
 import { api } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
 import { useAuth } from "@/context/AuthContext";
@@ -69,7 +69,7 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [routine, setRoutine] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [streak, setStreak] = useState({ streak: 0, today: { am_done: false, pm_done: false } });
+  const [streak, setStreak] = useState({ streak: 0, longest_streak: 0, today: { am_done: false, pm_done: false } });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -125,29 +125,61 @@ export default function Dashboard() {
             </p>
           )}
           {routine && (
-            <div className="mt-6 inline-flex items-center gap-3 rounded-full bg-white px-5 py-3 shadow-[0_6px_24px_rgba(43,48,36,0.06)] border border-[#2B3024]/8" data-testid="dashboard-streak">
-              <span className="w-8 h-8 rounded-full bg-[#F3E8E0] text-[#2B3024] grid place-items-center">
-                <Flame className="w-4 h-4" strokeWidth={1.6} />
-              </span>
-              <div>
-                <p className="text-[10px] tracking-[0.22em] uppercase font-bold text-[#2B3024]/60">
-                  Streak
-                </p>
-                <p className="text-sm text-[#2B3024]">
-                  <span className="font-serif italic text-lg" data-testid="dashboard-streak-count">
-                    {streak.streak}
-                  </span>{" "}
-                  {streak.streak === 1 ? "day" : "days"}
-                </p>
-              </div>
-              <div className="ml-4 pl-4 border-l border-[#2B3024]/10 flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase font-bold">
-                <span className={`inline-flex items-center gap-1 ${streak.today?.am_done ? "text-[#2B3024]" : "text-[#2B3024]/30"}`} data-testid="dashboard-today-am">
-                  <Sun className="w-3 h-3" strokeWidth={1.6} /> AM
+            <div className="mt-6 flex flex-wrap items-center gap-3" data-testid="dashboard-streak-row">
+              <div className="inline-flex items-center gap-3 rounded-full bg-white px-5 py-3 shadow-[0_6px_24px_rgba(43,48,36,0.06)] border border-[#2B3024]/8" data-testid="dashboard-streak">
+                <span className="w-8 h-8 rounded-full bg-[#F3E8E0] text-[#2B3024] grid place-items-center">
+                  <Flame className="w-4 h-4" strokeWidth={1.6} />
                 </span>
-                <span className={`inline-flex items-center gap-1 ${streak.today?.pm_done ? "text-[#2B3024]" : "text-[#2B3024]/30"}`} data-testid="dashboard-today-pm">
-                  <Moon className="w-3 h-3" strokeWidth={1.6} /> PM
-                </span>
+                <div>
+                  <p className="text-[10px] tracking-[0.22em] uppercase font-bold text-[#2B3024]/60">
+                    Streak
+                  </p>
+                  <p className="text-sm text-[#2B3024]">
+                    <span className="font-serif italic text-lg" data-testid="dashboard-streak-count">
+                      {streak.streak}
+                    </span>{" "}
+                    {streak.streak === 1 ? "day" : "days"}
+                  </p>
+                </div>
+                <div className="ml-4 pl-4 border-l border-[#2B3024]/10 flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase font-bold">
+                  <span className={`inline-flex items-center gap-1 ${streak.today?.am_done ? "text-[#2B3024]" : "text-[#2B3024]/30"}`} data-testid="dashboard-today-am">
+                    <Sun className="w-3 h-3" strokeWidth={1.6} /> AM
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${streak.today?.pm_done ? "text-[#2B3024]" : "text-[#2B3024]/30"}`} data-testid="dashboard-today-pm">
+                    <Moon className="w-3 h-3" strokeWidth={1.6} /> PM
+                  </span>
+                </div>
               </div>
+
+              {streak.longest_streak >= 3 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.2 }}
+                  className="inline-flex items-center gap-3 rounded-full bg-[#D2D9C5] px-5 py-3 border border-[#2B3024]/10"
+                  data-testid="dashboard-longest-streak"
+                  title={
+                    streak.longest_streak === streak.streak
+                      ? "This is your all-time best — keep going."
+                      : `Personal best so far: ${streak.longest_streak} days`
+                  }
+                >
+                  <span className="w-8 h-8 rounded-full bg-white text-[#2B3024] grid place-items-center">
+                    <Trophy className="w-4 h-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-[10px] tracking-[0.22em] uppercase font-bold text-[#2B3024]/70">
+                      Personal best
+                    </p>
+                    <p className="text-sm text-[#2B3024]">
+                      <span className="font-serif italic text-lg" data-testid="dashboard-longest-streak-count">
+                        {streak.longest_streak}
+                      </span>{" "}
+                      days
+                    </p>
+                  </div>
+                </motion.div>
+              )}
             </div>
           )}
         </motion.div>

@@ -653,7 +653,7 @@ async def get_streak(date: Optional[str] = None, user=Depends(_current)):
 
 
 async def _streak_payload(user_id: str, today: Optional[str] = None) -> dict:
-    """Compute the current streak (consecutive days with BOTH am_done and pm_done)
+    """Compute current + longest streaks (consecutive days with BOTH am_done and pm_done)
     ending at `today` (or yesterday if today isn't fully complete yet)."""
     today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     docs = await db.routine_completions.find(
@@ -667,18 +667,38 @@ async def _streak_payload(user_id: str, today: Optional[str] = None) -> dict:
     today_both = today_am and today_pm
 
     from datetime import date as _date, timedelta as _td
+
+    # --- Current streak (walk backward from today or yesterday) ---
     cursor = _date.fromisoformat(today) if today_both else _date.fromisoformat(today) - _td(days=1)
-    streak = 0
-    while streak < 400:
+    current_streak = 0
+    while current_streak < 400:
         ds = cursor.isoformat()
         c = by_date.get(ds)
         if not c or not (c.get("am_done") and c.get("pm_done")):
             break
-        streak += 1
+        current_streak += 1
         cursor -= _td(days=1)
 
+    # --- Longest streak (scan every complete day, track consecutive runs) ---
+    fully_done_dates = sorted(
+        _date.fromisoformat(d["date"])
+        for d in docs
+        if d.get("am_done") and d.get("pm_done")
+    )
+    longest = 0
+    run = 0
+    prev = None
+    for d in fully_done_dates:
+        if prev is not None and (d - prev).days == 1:
+            run += 1
+        else:
+            run = 1
+        longest = max(longest, run)
+        prev = d
+
     return {
-        "streak": streak,
+        "streak": current_streak,
+        "longest_streak": longest,
         "today": {"date": today, "am_done": today_am, "pm_done": today_pm},
     }
 
