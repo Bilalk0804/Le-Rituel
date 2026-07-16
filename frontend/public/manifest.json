@@ -1,0 +1,32 @@
+{
+  "name": "Le Rituel",
+  "short_name": "Le Rituel",
+  "description": "Your personalized skincare ritual, morning and night.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F9F8F5",
+  "theme_color": "#2B3024",
+  "categories": ["health", "lifestyle", "beauty"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

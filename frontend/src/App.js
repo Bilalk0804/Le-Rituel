@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ReminderBanner } from "@/components/ReminderBanner";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { Toaster } from "sonner";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
@@ -48,6 +49,7 @@ export default function App() {
           }}
         />
         <ReminderBanner />
+        <InstallPrompt />
         <Routes>
           <Route path="/" element={<LandingOrDashboard />} />
           <Route path="/login" element={<Login />} />

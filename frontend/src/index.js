@@ -21,3 +21,15 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Register the service worker so the app is installable on Android Chrome as a PWA.
+// Registered after load to avoid slowing the first paint.
+if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/service-worker.js")
+      .catch(() => {
+        /* silent — the app still works, just not installable */
+      });
+  });
+}
