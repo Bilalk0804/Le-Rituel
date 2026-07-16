@@ -156,6 +156,38 @@ class ProgressEntryInput(BaseModel):
         return cleaned or None
 
 
+import re as _re
+_TIME_RE = _re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class RemindersInput(BaseModel):
+    enabled: bool = False
+    am_time: str = Field(default="07:30", max_length=5)
+    pm_time: str = Field(default="22:00", max_length=5)
+
+    @field_validator("am_time", "pm_time")
+    @classmethod
+    def valid_time(cls, v):
+        v = (v or "").strip()
+        if not _TIME_RE.match(v):
+            raise ValueError("Time must be in HH:MM 24-hour format")
+        return v
+
+
+class CompletionInput(BaseModel):
+    date: str = Field(min_length=10, max_length=10)  # YYYY-MM-DD (client-local)
+    time_of_day: Literal["am", "pm"]
+    done: bool
+
+    @field_validator("date")
+    @classmethod
+    def valid_date(cls, v):
+        v = (v or "").strip()
+        if not _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("Date must be YYYY-MM-DD")
+        return v
+
+
 class SkinProfileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     skin_type: SkinType
@@ -211,6 +243,7 @@ async def _startup():
     await db.routines.create_index("user_id")
     await db.token_blocklist.create_index("expires_at", expireAfterSeconds=0)
     await db.progress_entries.create_index([("user_id", 1), ("created_at", -1)])
+    await db.routine_completions.create_index([("user_id", 1), ("date", -1)], unique=True)
     # Seed
     await seed_products(db)
     await _seed_admin()
@@ -546,6 +579,99 @@ async def list_products():
     return {"products": docs}
 
 
+# ---------- Reminders + Streak ----------
+@api.get("/settings/reminders")
+async def get_reminders(user=Depends(_current)):
+    doc = await db.users.find_one({"_id": ObjectId(user["id"])}, {"reminders": 1})
+    r = (doc or {}).get("reminders") or {}
+    return {
+        "reminders": {
+            "enabled": bool(r.get("enabled", False)),
+            "am_time": r.get("am_time", "07:30"),
+            "pm_time": r.get("pm_time", "22:00"),
+        }
+    }
+
+
+@api.put("/settings/reminders")
+async def set_reminders(body: RemindersInput, user=Depends(_current)):
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$set": {"reminders": {
+            "enabled": body.enabled,
+            "am_time": body.am_time,
+            "pm_time": body.pm_time,
+        }}},
+    )
+    return {"reminders": body.model_dump()}
+
+
+@api.post("/routine/complete")
+async def mark_completion(body: CompletionInput, user=Depends(_current)):
+    field = "am_done" if body.time_of_day == "am" else "pm_done"
+    await db.routine_completions.update_one(
+        {"user_id": user["id"], "date": body.date},
+        {
+            "$set": {
+                field: body.done,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "$setOnInsert": {"user_id": user["id"], "date": body.date},
+        },
+        upsert=True,
+    )
+    return await _streak_payload(user["id"], today=body.date)
+
+
+@api.get("/routine/streak")
+async def get_streak(date: Optional[str] = None, user=Depends(_current)):
+    if date:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+    return await _streak_payload(user["id"], today=date)
+
+
+async def _streak_payload(user_id: str, today: Optional[str] = None) -> dict:
+    """Compute the current streak (consecutive days with BOTH am_done and pm_done)
+    ending at `today` (or yesterday if today isn't fully complete yet)."""
+    today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    docs = await db.routine_completions.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).sort("date", -1).limit(400).to_list(400)
+
+    by_date = {d["date"]: d for d in docs}
+    today_doc = by_date.get(today, {})
+    today_am = bool(today_doc.get("am_done"))
+    today_pm = bool(today_doc.get("pm_done"))
+    today_both = today_am and today_pm
+
+    from datetime import date as _date, timedelta as _td
+    cursor = _date.fromisoformat(today) if today_both else _date.fromisoformat(today) - _td(days=1)
+    streak = 0
+    while streak < 400:
+        ds = cursor.isoformat()
+        c = by_date.get(ds)
+        if not c or not (c.get("am_done") and c.get("pm_done")):
+            break
+        streak += 1
+        cursor -= _td(days=1)
+
+    return {
+        "streak": streak,
+        "today": {"date": today, "am_done": today_am, "pm_done": today_pm},
+    }
+
+
+@api.get("/routine/completions")
+async def list_completions(user=Depends(_current)):
+    docs = await db.routine_completions.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("date", -1).limit(60).to_list(60)
+    return {"completions": docs}
+
+
 # ---------- Progress Tracking (manual self-rated) ----------
 @api.post("/progress/entries")
 async def create_progress_entry(body: ProgressEntryInput, user=Depends(_current)):
@@ -654,6 +780,7 @@ async def delete_account(response: Response, user=Depends(_current)):
     await db.skin_profiles.delete_many({"user_id": uid})
     await db.routines.delete_many({"user_id": uid})
     await db.progress_entries.delete_many({"user_id": uid})
+    await db.routine_completions.delete_many({"user_id": uid})
     await db.users.delete_one({"_id": ObjectId(uid)})
     clear_auth_cookies(response)
     return {"ok": True}

@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sun, Moon, Bookmark, Check, Pencil, Home } from "lucide-react";
+import { Sun, Moon, Bookmark, Check, Pencil, Home, Sparkles } from "lucide-react";
 import { api, formatApiErrorDetail } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
+import { todayISO } from "@/components/ReminderBanner";
 import { toast } from "sonner";
 
 const CATEGORY_META = {
@@ -145,16 +146,25 @@ function StepRow({ step, onSave }) {
   );
 }
 
-function ChecklistSection({ title, icon: Icon, steps, onUpdateStep, testid }) {
+function ChecklistSection({ title, icon: Icon, steps, onUpdateStep, testid, done, onMarkDone, timeKey }) {
   const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
   return (
     <section data-testid={testid}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Icon className="w-5 h-5 text-[#2B3024]" strokeWidth={1.5} />
         <h2 className="font-serif italic text-2xl text-[#2B3024]">{title}</h2>
         <span className="text-xs tracking-[0.2em] uppercase text-[#2B3024]/50 ml-1">
           {steps.length} steps
         </span>
+        {done && (
+          <span
+            className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#2B3024] text-[#F9F8F5] px-3 py-1 text-[10px] tracking-[0.22em] uppercase font-bold"
+            data-testid={`${testid}-done-badge`}
+          >
+            <Check className="w-3 h-3" strokeWidth={2.4} />
+            Done today
+          </span>
+        )}
       </div>
       <motion.ol variants={container} initial="hidden" animate="show" className="mt-5 space-y-3">
         {steps.map((s) => (
@@ -165,6 +175,17 @@ function ChecklistSection({ title, icon: Icon, steps, onUpdateStep, testid }) {
           />
         ))}
       </motion.ol>
+      <button
+        onClick={() => onMarkDone(!done)}
+        data-testid={`${testid}-mark-done-btn`}
+        className={`mt-5 w-full rounded-full py-3 text-sm tracking-wide font-medium transition-colors ${
+          done
+            ? "bg-white border border-[#2B3024]/25 text-[#2B3024]/70 hover:bg-[#2B3024]/5"
+            : "bg-[#2B3024] text-[#F9F8F5] hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(43,48,36,0.18)]"
+        }`}
+      >
+        {done ? `Undo ${timeKey === "am" ? "morning" : "evening"} completion` : `I did my ${timeKey === "am" ? "morning" : "evening"} ritual`}
+      </button>
     </section>
   );
 }
@@ -174,6 +195,39 @@ export default function Result() {
   const nav = useNavigate();
   const [routine, setRoutine] = useState(state?.routine || null);
   const [loading, setLoading] = useState(!routine);
+  const [streak, setStreak] = useState({ streak: 0, today: { am_done: false, pm_done: false } });
+
+  useEffect(() => {
+    // Load persistent completion + streak whenever the page mounts.
+    (async () => {
+      try {
+        const { data } = await api.get("/routine/streak");
+        setStreak(data);
+      } catch {
+        /* silent */
+      }
+    })();
+  }, []);
+
+  const markDone = async (time_of_day, done) => {
+    try {
+      const { data } = await api.post("/routine/complete", {
+        date: todayISO(),
+        time_of_day,
+        done,
+      });
+      setStreak(data);
+      if (done) {
+        toast.success(
+          time_of_day === "am"
+            ? "Morning ritual complete"
+            : `Evening ritual complete${data.streak >= 2 ? ` — ${data.streak}-day streak` : ""}`
+        );
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    }
+  };
 
   useEffect(() => {
     if (routine) return;
@@ -229,6 +283,16 @@ export default function Result() {
             Tap a product name to swap in your own. Tick each step as you do it — the list resets on
             your next visit.
           </p>
+          {streak.streak > 0 && (
+            <p
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/70 backdrop-blur px-4 py-2 border border-[#2B3024]/10 text-sm text-[#2B3024]"
+              data-testid="result-streak-chip"
+            >
+              <Sparkles className="w-4 h-4" strokeWidth={1.6} />
+              <span className="font-medium">{streak.streak}-day streak</span>
+              <span className="text-[#2B3024]/60">— both routines done in a row</span>
+            </p>
+          )}
         </motion.div>
 
         {routine.ai_notes && (
@@ -255,6 +319,9 @@ export default function Result() {
             steps={amSteps}
             onUpdateStep={updateStep}
             testid="checklist-am"
+            timeKey="am"
+            done={streak.today?.am_done}
+            onMarkDone={(next) => markDone("am", next)}
           />
           <ChecklistSection
             title="Evening"
@@ -262,6 +329,9 @@ export default function Result() {
             steps={pmSteps}
             onUpdateStep={updateStep}
             testid="checklist-pm"
+            timeKey="pm"
+            done={streak.today?.pm_done}
+            onMarkDone={(next) => markDone("pm", next)}
           />
         </div>
 
