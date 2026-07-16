@@ -1,10 +1,68 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Sun, Moon, RefreshCcw, Settings as SettingsIcon } from "lucide-react";
+import { Sun, Moon, RefreshCcw, Settings as SettingsIcon, Check, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
 import { useAuth } from "@/context/AuthContext";
 import { motion } from "framer-motion";
+
+const CATEGORY_LABEL = {
+  cleanser: "Cleanser",
+  serum: "Serum",
+  moisturizer: "Moisturizer",
+  sunscreen: "Sunscreen",
+  retinol: "Retinol",
+};
+
+function MiniChecklistItem({ step }) {
+  const [done, setDone] = useState(false);
+  const testid = `dashboard-step-${step.time_of_day}-${step.step_order}`;
+  return (
+    <li className="flex items-start gap-3" data-testid={testid}>
+      <button
+        onClick={() => setDone((d) => !d)}
+        aria-label={done ? "Mark undone" : "Mark done"}
+        data-testid={`${testid}-check`}
+        className={`mt-0.5 w-6 h-6 rounded-full border-2 flex-shrink-0 grid place-items-center transition-colors ${
+          done
+            ? "bg-[#2B3024] border-[#2B3024] text-[#F9F8F5]"
+            : "bg-white border-[#2B3024]/25"
+        }`}
+      >
+        {done && <Check className="w-3.5 h-3.5" strokeWidth={2.4} />}
+      </button>
+      <div className={`min-w-0 ${done ? "opacity-60" : ""}`}>
+        <p className={`text-xs tracking-[0.16em] uppercase font-bold text-[#2B3024]/60`}>
+          {String(step.step_order).padStart(2, "0")} · {CATEGORY_LABEL[step.product_category] || step.product_category}
+        </p>
+        <p className={`text-sm font-medium text-[#2B3024] mt-0.5 leading-snug ${done ? "line-through" : ""}`}>
+          {step.product_name || <span className="italic text-[#2B3024]/50">Not set yet</span>}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+function DashboardChecklist({ title, icon: Icon, steps, bg, chipBg }) {
+  return (
+    <div className={`rounded-3xl p-7 ${bg}`}>
+      <div className="flex items-center gap-3">
+        <Icon className="w-4 h-4 text-[#2B3024]" strokeWidth={1.6} />
+        <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#2B3024]/70">
+          {title}
+        </p>
+        <span className={`ml-auto text-[10px] tracking-[0.18em] uppercase text-[#2B3024]/60 rounded-full px-2 py-0.5 ${chipBg}`}>
+          {steps.length} steps
+        </span>
+      </div>
+      <ul className="mt-5 space-y-4">
+        {steps.map((s) => (
+          <MiniChecklistItem key={`${s.time_of_day}-${s.step_order}`} step={s} />
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -21,11 +79,9 @@ export default function Dashboard() {
         setProfile(p.data.profile);
       } catch (e) {
         if (e.response?.status === 401) {
-          // Session expired — bounce to login.
           nav("/login", { replace: true });
           return;
         }
-        // Other errors: leave routine/profile as null so the empty state renders.
       } finally {
         setLoading(false);
       }
@@ -41,6 +97,8 @@ export default function Dashboard() {
   }
 
   const greetName = user?.name || (user?.email ? user.email.split("@")[0] : "there");
+  const amSteps = (routine?.steps || []).filter((s) => s.time_of_day === "am");
+  const pmSteps = (routine?.steps || []).filter((s) => s.time_of_day === "pm");
 
   return (
     <div className="min-h-[100dvh] bg-[#F9F8F5]" data-testid="dashboard-page">
@@ -49,14 +107,27 @@ export default function Dashboard() {
       <div className="px-6 pt-4 pb-20 max-w-4xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <span className="text-xs tracking-[0.28em] uppercase font-bold text-[#7A8271]">Welcome</span>
-          <h1 className="mt-3 font-serif italic text-4xl sm:text-5xl text-[#2B3024]" data-testid="dashboard-greeting">
+          <h1
+            className="mt-3 font-serif italic text-4xl sm:text-5xl text-[#2B3024]"
+            data-testid="dashboard-greeting"
+          >
             Hello, {greetName}.
           </h1>
+          {routine && (
+            <p className="mt-3 text-[#2B3024]/70">
+              Tick each step as you go — your list resets on your next visit.
+            </p>
+          )}
         </motion.div>
 
         {!routine ? (
-          <div className="mt-10 bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(43,48,36,0.06)]" data-testid="dashboard-empty-state">
-            <p className="font-serif italic text-2xl text-[#2B3024]">You haven&apos;t built your ritual yet.</p>
+          <div
+            className="mt-10 bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(43,48,36,0.06)]"
+            data-testid="dashboard-empty-state"
+          >
+            <p className="font-serif italic text-2xl text-[#2B3024]">
+              You haven&apos;t built your ritual yet.
+            </p>
             <p className="mt-2 text-[#2B3024]/70">It takes about two minutes.</p>
             <Link
               to="/quiz"
@@ -69,58 +140,29 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="mt-10 grid md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-3xl p-7 shadow-[0_8px_32px_rgba(43,48,36,0.06)]">
-                <div className="flex items-center gap-3">
-                  <Sun className="w-4 h-4 text-[#2B3024]" strokeWidth={1.6} />
-                  <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#2B3024]/60">Morning</p>
-                </div>
-                <ol className="mt-5 space-y-3">
-                  {routine.am_steps.map((s, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className="mt-0.5 w-6 h-6 rounded-full bg-[#F3E8E0] text-[#2B3024] text-xs font-medium grid place-items-center">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-[#2B3024] font-medium">{s.label}</p>
-                        {s.examples?.[0] && (
-                          <p className="text-xs text-[#2B3024]/60 mt-0.5">{s.examples[0].name}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="bg-[#D2D9C5] rounded-3xl p-7">
-                <div className="flex items-center gap-3">
-                  <Moon className="w-4 h-4 text-[#2B3024]" strokeWidth={1.6} />
-                  <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#2B3024]/70">Evening</p>
-                </div>
-                <ol className="mt-5 space-y-3">
-                  {routine.pm_steps.map((s, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className="mt-0.5 w-6 h-6 rounded-full bg-white/70 text-[#2B3024] text-xs font-medium grid place-items-center">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-[#2B3024] font-medium">{s.label}</p>
-                        {s.examples?.[0] && (
-                          <p className="text-xs text-[#2B3024]/70 mt-0.5">{s.examples[0].name}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              <DashboardChecklist
+                title="Morning"
+                icon={Sun}
+                steps={amSteps}
+                bg="bg-white shadow-[0_8px_32px_rgba(43,48,36,0.06)]"
+                chipBg="bg-[#F3E8E0]"
+              />
+              <DashboardChecklist
+                title="Evening"
+                icon={Moon}
+                steps={pmSteps}
+                bg="bg-[#D2D9C5]"
+                chipBg="bg-white/70"
+              />
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
               <button
                 onClick={() => nav("/result")}
                 data-testid="dashboard-view-full-btn"
-                className="rounded-full bg-[#2B3024] text-[#F9F8F5] px-6 py-3 text-sm tracking-wide font-medium hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(43,48,36,0.18)]"
+                className="rounded-full bg-[#2B3024] text-[#F9F8F5] px-6 py-3 text-sm tracking-wide font-medium hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(43,48,36,0.18)] inline-flex items-center gap-2"
               >
-                View full ritual
+                Open full checklist <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.8} />
               </button>
               <Link
                 to="/quiz"

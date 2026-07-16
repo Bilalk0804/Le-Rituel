@@ -1,67 +1,171 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sun, Moon, ArrowRight, Bookmark } from "lucide-react";
-import { api } from "@/lib/api";
+import { Sun, Moon, Bookmark, Check, Pencil, Home } from "lucide-react";
+import { api, formatApiErrorDetail } from "@/lib/api";
 import { TopBar } from "@/components/TopBar";
 import { toast } from "sonner";
 
-function StepCard({ step, index }) {
-  const hero = step.examples?.[0]?.image_url;
+const CATEGORY_META = {
+  cleanser: { label: "Cleanser", accent: "#D2D9C5" },
+  serum: { label: "Serum", accent: "#F3E8E0" },
+  moisturizer: { label: "Moisturizer", accent: "#EDE4D5" },
+  sunscreen: { label: "Sunscreen", accent: "#F5D9B2" },
+  retinol: { label: "Retinol", accent: "#D9C7BC" },
+};
+
+function StepRow({ step, onSave }) {
+  const meta = CATEGORY_META[step.product_category] || {
+    label: step.product_category,
+    accent: "#F3E8E0",
+  };
+  const [checked, setChecked] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(step.product_name || "");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setDraft(step.product_name || "");
+  }, [step.product_name]);
+
+  const startEdit = () => {
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 30);
+  };
+
+  const commit = async () => {
+    const next = draft.trim();
+    if (next === (step.product_name || "")) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(next);
+      toast.success("Saved");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+      setDraft(step.product_name || "");
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const stepTestId = `step-${step.time_of_day}-${step.step_order}`;
+  const hero = step.suggestions?.[0]?.image_url;
+
   return (
     <motion.li
       variants={{
-        hidden: { opacity: 0, scale: 0.96, y: 8 },
-        show: { opacity: 1, scale: 1, y: 0 },
+        hidden: { opacity: 0, y: 8 },
+        show: { opacity: 1, y: 0 },
       }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="bg-white rounded-3xl overflow-hidden shadow-[0_8px_32px_rgba(43,48,36,0.06)]"
-      data-testid={`routine-step-${step.step}`}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className={`bg-white rounded-3xl px-5 py-4 shadow-[0_6px_24px_rgba(43,48,36,0.05)] flex items-start gap-4 transition-opacity ${
+        checked ? "opacity-60" : "opacity-100"
+      }`}
+      data-testid={stepTestId}
     >
+      <button
+        onClick={() => setChecked((c) => !c)}
+        aria-label={checked ? "Mark as not done" : "Mark as done"}
+        data-testid={`${stepTestId}-check`}
+        className={`mt-0.5 w-7 h-7 rounded-full border-2 flex-shrink-0 grid place-items-center transition-colors ${
+          checked
+            ? "bg-[#2B3024] border-[#2B3024] text-[#F9F8F5]"
+            : "bg-white border-[#2B3024]/25 hover:border-[#2B3024]/60"
+        }`}
+      >
+        {checked && <Check className="w-4 h-4" strokeWidth={2.4} />}
+      </button>
+
       {hero && (
-        <div className="w-full h-40 bg-[#F3E8E0] overflow-hidden">
+        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#F3E8E0] flex-shrink-0">
           <img
             src={hero}
-            alt={step.examples[0].name}
+            alt={step.product_name}
             loading="lazy"
-            className="w-full h-full object-cover"
-            data-testid={`routine-step-${step.step}-image`}
+            className={`w-full h-full object-cover ${checked ? "grayscale" : ""}`}
           />
         </div>
       )}
-      <div className="p-6">
-        <div className="flex items-center gap-4">
-          <span className="w-10 h-10 rounded-full bg-[#F3E8E0] text-[#2B3024] font-serif italic text-lg grid place-items-center">
-            {index + 1}
-          </span>
-          <div>
-            <p className="text-xs tracking-[0.2em] uppercase font-bold text-[#7A8271]">Step {index + 1}</p>
-            <p className="font-serif italic text-2xl text-[#2B3024] leading-tight">{step.label}</p>
-          </div>
-        </div>
-        <p className="mt-4 text-[#2B3024]/75 leading-relaxed">{step.why}</p>
 
-        {step.examples?.length > 0 && (
-          <div className="mt-5 pt-5 border-t border-[#2B3024]/8 space-y-4">
-            {step.examples.map((p, i) => (
-              <div key={i} className="flex items-start gap-4">
-                {p.image_url && (
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#F3E8E0] flex-shrink-0">
-                    <img src={p.image_url} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="font-medium text-[#2B3024] leading-snug">{p.name}</p>
-                  <p className="text-xs tracking-[0.14em] uppercase text-[#2B3024]/50 mt-1">
-                    {p.brand} · {p.budget_tier}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] tracking-[0.22em] uppercase font-bold text-[#2B3024]"
+            style={{ backgroundColor: meta.accent }}
+          >
+            {String(step.step_order).padStart(2, "0")} · {meta.label}
+          </span>
+        </div>
+
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") {
+                setDraft(step.product_name || "");
+                setEditing(false);
+              }
+            }}
+            disabled={saving}
+            data-testid={`${stepTestId}-input`}
+            placeholder="Product name..."
+            className="mt-2 w-full font-medium text-[#2B3024] bg-transparent border-b border-[#2B3024]/30 focus:border-[#2B3024] focus:outline-none pb-1"
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            data-testid={`${stepTestId}-edit-btn`}
+            className={`mt-1.5 text-left w-full inline-flex items-baseline gap-2 group ${
+              checked ? "line-through" : ""
+            }`}
+          >
+            <span className="font-medium text-[#2B3024] leading-snug">
+              {step.product_name || (
+                <span className="text-[#2B3024]/40 italic">Tap to add a product</span>
+              )}
+            </span>
+            <Pencil className="w-3 h-3 text-[#2B3024]/40 group-hover:text-[#2B3024]/80" strokeWidth={1.6} />
+          </button>
+        )}
+
+        {step.why && !checked && (
+          <p className="mt-2 text-sm text-[#2B3024]/65 leading-relaxed">{step.why}</p>
         )}
       </div>
     </motion.li>
+  );
+}
+
+function ChecklistSection({ title, icon: Icon, steps, onUpdateStep, testid }) {
+  const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
+  return (
+    <section data-testid={testid}>
+      <div className="flex items-center gap-3">
+        <Icon className="w-5 h-5 text-[#2B3024]" strokeWidth={1.5} />
+        <h2 className="font-serif italic text-2xl text-[#2B3024]">{title}</h2>
+        <span className="text-xs tracking-[0.2em] uppercase text-[#2B3024]/50 ml-1">
+          {steps.length} steps
+        </span>
+      </div>
+      <motion.ol variants={container} initial="hidden" animate="show" className="mt-5 space-y-3">
+        {steps.map((s) => (
+          <StepRow
+            key={`${s.time_of_day}-${s.step_order}`}
+            step={s}
+            onSave={(name) => onUpdateStep(s, name)}
+          />
+        ))}
+      </motion.ol>
+    </section>
   );
 }
 
@@ -70,7 +174,6 @@ export default function Result() {
   const nav = useNavigate();
   const [routine, setRoutine] = useState(state?.routine || null);
   const [loading, setLoading] = useState(!routine);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (routine) return;
@@ -87,39 +190,44 @@ export default function Result() {
     })();
   }, [routine, nav]);
 
-  const save = () => {
-    // Already saved server-side at /routine/generate; this is UX confirmation.
-    setSaved(true);
-    toast.success("Ritual saved to your profile");
-    setTimeout(() => nav("/dashboard"), 700);
+  const updateStep = async (step, newName) => {
+    const { data } = await api.patch("/routine/steps", {
+      time_of_day: step.time_of_day,
+      step_order: step.step_order,
+      product_name: newName,
+    });
+    setRoutine(data.routine);
   };
 
   if (loading || !routine) {
     return (
       <div className="min-h-[100dvh] grid place-items-center bg-[#D2D9C5]">
-        <span className="text-xs tracking-[0.2em] uppercase text-[#2B3024]/60">Preparing your ritual</span>
+        <span className="text-xs tracking-[0.2em] uppercase text-[#2B3024]/60">
+          Preparing your ritual
+        </span>
       </div>
     );
   }
 
-  const container = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } };
+  const amSteps = routine.steps.filter((s) => s.time_of_day === "am");
+  const pmSteps = routine.steps.filter((s) => s.time_of_day === "pm");
 
   return (
     <div className="min-h-[100dvh] bg-[#D2D9C5]" data-testid="result-page">
       <TopBar />
 
       <div className="px-6 pt-4 pb-24 max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <span className="text-xs tracking-[0.28em] uppercase font-bold text-[#2B3024]/70">Your ritual</span>
-          <h1 className="mt-4 font-serif italic text-4xl sm:text-5xl text-[#2B3024] leading-tight" data-testid="result-heading">
+          <h1
+            className="mt-4 font-serif italic text-4xl sm:text-5xl text-[#2B3024] leading-tight"
+            data-testid="result-heading"
+          >
             Built for you.
           </h1>
           <p className="mt-3 text-[#2B3024]/70 max-w-lg">
-            Two moments a day. Four purposeful steps in the morning, three at night. Simple. Consistent.
+            Tap a product name to swap in your own. Tick each step as you do it — the list resets on
+            your next visit.
           </p>
         </motion.div>
 
@@ -140,48 +248,41 @@ export default function Result() {
           </motion.div>
         )}
 
-        <div className="mt-10 grid md:grid-cols-2 gap-8">
-          <section>
-            <div className="flex items-center gap-3">
-              <Sun className="w-5 h-5 text-[#2B3024]" strokeWidth={1.5} />
-              <h2 className="font-serif italic text-2xl text-[#2B3024]">Morning</h2>
-            </div>
-            <motion.ul variants={container} initial="hidden" animate="show" className="mt-5 space-y-4">
-              {routine.am_steps.map((s, i) => (
-                <StepCard key={`am-${i}`} step={s} index={i} />
-              ))}
-            </motion.ul>
-          </section>
-
-          <section>
-            <div className="flex items-center gap-3">
-              <Moon className="w-5 h-5 text-[#2B3024]" strokeWidth={1.5} />
-              <h2 className="font-serif italic text-2xl text-[#2B3024]">Evening</h2>
-            </div>
-            <motion.ul variants={container} initial="hidden" animate="show" className="mt-5 space-y-4">
-              {routine.pm_steps.map((s, i) => (
-                <StepCard key={`pm-${i}`} step={s} index={i} />
-              ))}
-            </motion.ul>
-          </section>
+        <div className="mt-10 grid md:grid-cols-2 gap-10">
+          <ChecklistSection
+            title="Morning"
+            icon={Sun}
+            steps={amSteps}
+            onUpdateStep={updateStep}
+            testid="checklist-am"
+          />
+          <ChecklistSection
+            title="Evening"
+            icon={Moon}
+            steps={pmSteps}
+            onUpdateStep={updateStep}
+            testid="checklist-pm"
+          />
         </div>
 
         <div className="mt-12 flex flex-col items-center gap-4">
           <button
-            onClick={save}
-            disabled={saved}
+            onClick={() => {
+              toast.success("Ritual saved to your profile");
+              setTimeout(() => nav("/dashboard"), 500);
+            }}
             data-testid="result-save-btn"
-            className="rounded-full bg-[#2B3024] text-[#F9F8F5] px-10 py-4 text-sm tracking-wide font-medium hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(43,48,36,0.18)] inline-flex items-center gap-3 disabled:opacity-70"
+            className="rounded-full bg-[#2B3024] text-[#F9F8F5] px-10 py-4 text-sm tracking-wide font-medium hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(43,48,36,0.18)] inline-flex items-center gap-3"
           >
             <Bookmark className="w-4 h-4" strokeWidth={1.8} />
-            {saved ? "Saved" : "Save my routine"}
+            Save my routine
           </button>
           <Link
             to="/dashboard"
             data-testid="result-dashboard-link"
             className="text-sm text-[#2B3024]/70 hover:text-[#2B3024] underline underline-offset-4 inline-flex items-center gap-2"
           >
-            Skip to dashboard <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.8} />
+            <Home className="w-3.5 h-3.5" strokeWidth={1.8} /> Skip to dashboard
           </Link>
         </div>
       </div>

@@ -103,6 +103,18 @@ class SkinAnalyzeInput(BaseModel):
         return v
 
 
+class UpdateStepInput(BaseModel):
+    time_of_day: Literal["am", "pm"]
+    step_order: int = Field(ge=1, le=10)
+    product_name: str = Field(default="", max_length=120)
+
+    @field_validator("product_name")
+    @classmethod
+    def clean_name(cls, v):
+        cleaned = "".join(ch for ch in (v or "") if ch.isprintable()).strip()
+        return cleaned
+
+
 class SkinProfileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     skin_type: SkinType
@@ -411,8 +423,7 @@ async def generate_routine(body: SkinProfileInput, user=Depends(_current)):
     routine = build_routine(products, profile_dict)
     routine_doc = {
         "user_id": user["id"],
-        "am_steps": routine["am_steps"],
-        "pm_steps": routine["pm_steps"],
+        "steps": routine["steps"],
         "ai_notes": body.ai_notes or "",
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -430,13 +441,60 @@ async def get_routine(user=Depends(_current)):
     return {"routine": _routine_public(doc)}
 
 
+@api.patch("/routine/steps")
+async def patch_step(body: UpdateStepInput, user=Depends(_current)):
+    """Update a single step's product_name (user-provided override)."""
+    doc = await db.routines.find_one({"user_id": user["id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="No routine yet")
+    steps = doc.get("steps", [])
+    updated = False
+    for s in steps:
+        if s.get("time_of_day") == body.time_of_day and int(s.get("step_order", 0)) == body.step_order:
+            s["product_name"] = body.product_name
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Step not found")
+    await db.routines.update_one(
+        {"user_id": user["id"]},
+        {"$set": {"steps": steps, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"routine": _routine_public({**doc, "steps": steps})}
+
+
 def _routine_public(doc: dict) -> dict:
+    steps = doc.get("steps")
+    if steps is None:
+        # Legacy shape (am_steps/pm_steps) — synthesize the flat schema on the fly
+        # so older stored routines keep rendering after the schema switch.
+        steps = _legacy_to_flat_steps(doc)
     return {
-        "am_steps": doc.get("am_steps", []),
-        "pm_steps": doc.get("pm_steps", []),
+        "steps": steps,
         "ai_notes": doc.get("ai_notes") or "",
         "generated_at": doc.get("generated_at"),
     }
+
+
+def _legacy_to_flat_steps(doc: dict) -> List[dict]:
+    """Best-effort migration from the old am_steps/pm_steps shape."""
+    out: List[dict] = []
+    legacy_map = {"cleanser": "cleanser", "treatment": "serum", "moisturizer": "moisturizer", "spf": "sunscreen"}
+    for time_key, tod in (("am_steps", "am"), ("pm_steps", "pm")):
+        order = 1
+        for s in doc.get(time_key, []) or []:
+            cat = legacy_map.get(s.get("step") or "", s.get("step") or "")
+            examples = s.get("examples") or []
+            out.append({
+                "time_of_day": tod,
+                "step_order": order,
+                "product_category": cat,
+                "product_name": (examples[0].get("name") if examples else "") if isinstance(examples, list) else "",
+                "why": s.get("why", ""),
+                "suggestions": examples,
+            })
+            order += 1
+    return out
 
 
 # ---------- Products ----------
