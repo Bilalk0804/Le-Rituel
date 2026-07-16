@@ -29,6 +29,7 @@ from products_seed import seed_products
 from recommender import build_routine
 from skin_analysis import analyze_skin_photo
 from ingredient_checker import check_pair, known_ingredients
+from chat_assistant import build_system_prompt, chat_reply
 
 import jwt as _jwt
 
@@ -186,6 +187,24 @@ class CompletionInput(BaseModel):
         if not _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
             raise ValueError("Date must be YYYY-MM-DD")
         return v
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
+class ChatInput(BaseModel):
+    message: str = Field(min_length=1, max_length=1500)
+    history: List[ChatTurn] = Field(default_factory=list, max_length=20)
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, v):
+        cleaned = "".join(ch for ch in (v or "") if ch.isprintable() or ch in "\n\r").strip()
+        if not cleaned:
+            raise ValueError("message must not be blank")
+        return cleaned
 
 
 class SkinProfileInput(BaseModel):
@@ -734,6 +753,28 @@ async def check_ingredients(body: IngredientCheckInput, user=Depends(_current)):
     """Check whether two ingredients can be combined. Static rule-based lookup."""
     result = check_pair(body.ingredient_a, body.ingredient_b)
     return {"result": result}
+
+
+# ---------- AI Skincare Chat Assistant ----------
+@api.post("/chat")
+async def chat(body: ChatInput, user=Depends(_current)):
+    """Personalized skincare-only chat using Claude Sonnet 4.5."""
+    profile = await db.skin_profiles.find_one({"user_id": user["id"]})
+    routine = await db.routines.find_one({"user_id": user["id"]})
+    profile_dict = _profile_public(profile) if profile else None
+    routine_dict = _routine_public(routine) if routine else None
+    system_prompt = build_system_prompt(profile_dict, routine_dict)
+    try:
+        reply = await chat_reply(
+            session_id=f"chat-{user['id']}",
+            system_prompt=system_prompt,
+            history=[t.model_dump() for t in body.history],
+            user_text=body.message,
+        )
+    except Exception as e:
+        logger.exception("chat failed: %s", e)
+        raise HTTPException(status_code=502, detail="Assistant is unavailable right now")
+    return {"reply": reply}
 
 
 # ---------- Skin Photo Analysis (Claude Sonnet 4.5 vision) ----------

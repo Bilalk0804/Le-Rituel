@@ -14,6 +14,7 @@ import Dashboard from "@/pages/Dashboard";
 import Settings from "@/pages/Settings";
 import CheckIngredients from "@/pages/CheckIngredients";
 import Progress from "@/pages/Progress";
+import Chat from "@/pages/Chat";
 
 function LandingOrDashboard() {
   const { user } = useAuth();
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/check" element={<ProtectedRoute><CheckIngredients /></ProtectedRoute>} />
           <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
+          <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
