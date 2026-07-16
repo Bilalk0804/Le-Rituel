@@ -1,0 +1,68 @@
+# docker-compose for Le Rituel — three services: mongo, backend, frontend
+# Bring the stack up locally with:
+#     cp .env.example .env    # fill in secrets
+#     docker compose up --build
+# Then open http://localhost:8080
+
+name: le-rituel
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - le_rituel
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      DB_NAME: ${DB_NAME:-le_rituel}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?DATA_ENCRYPTION_KEY must be set}
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@lerituel.app}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123!}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+    expose:
+      - "8001"
+    networks:
+      - le_rituel
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the CRA bundle at build time. Point the browser at the
+        # nginx proxy of this same container — `/api` is forwarded to backend.
+        REACT_APP_BACKEND_URL: ${PUBLIC_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - le_rituel
+
+volumes:
+  mongo_data:
+
+networks:
+  le_rituel:
+    driver: bridge
